@@ -42,20 +42,39 @@ The main script to use here is ~training.py~ which can be run from the terminal 
     python3 training.py myimage.png --output-dir results/myresults/ --mode image --weight myimage-wt.png
 ~~~
 ### Arguments:
-(image/folder) - path to the image or folder of images to train (required)
---mode - (image/folder/video) Defines how paths are interpreted and how the loop is run. Image trains a single image file. Folder trains a folder of images independently. Video mode trains a folder of image frames, with the added feature that it will initialize training of each frame using the previous frame results, with a new "keyframe" every 10 frames. The video mode is created to decrease the amount of flicker between frames from discontinuities in how the wavelets are trained.
---weight - path to the image or folder of images to use as weights. Expected naming convention is "<imagename>-wt.png" (optional)
---iterations - baseline number of iterations for each training scale (required)
---iter-multiple - iteration multiplier at each training scale, allows for more training at lower resolutions. default is 1.5
---output-dir - path to the directory where files will be saved (required)
---rescales - number of training scales. Each scale is a division by 2, so with 2 rescales and size 256, it will train at 64, 128, and 256. default is 2
---size - maximum pixel size for training. Aspect ratio will automatically be maintained. default is 256
---num-gabors - number of wavelets to train. Higher values allow for more fidelity. default is 256
++ (image/folder) - path to the image or folder of images to train (required)
++ --mode - (image/folder/video) Defines how paths are interpreted and how the loop is run. Image trains a single image file. Folder trains a folder of images independently. Video mode trains a folder of image frames, with the added feature that it will initialize training of each frame using the previous frame results, with a new "keyframe" every 10 frames. The video mode is created to decrease the amount of flicker between frames from discontinuities in how the wavelets are trained.
++ --weight - path to the image or folder of images to use as weights. Expected naming convention is "<imagename>-wt.png" (optional)
++ --iterations - baseline number of iterations for each training scale (required)
++ --iter-multiple - iteration multiplier at each training scale, allows for more training at lower resolutions. default is 1.5
++ --output-dir - path to the directory where files will be saved (required)
++ --rescales - number of training scales. Each scale is a division by 2, so with 2 rescales and size 256, it will train at 64, 128, and 256. default is 2
++ --size - maximum pixel size for training. Aspect ratio will automatically be maintained. default is 256
++ --num-gabors - number of wavelets to train. Higher values allow for more fidelity. default is 256
 ### Training/Loss Arguments
 Most of these are unnecessary and were mostly experiments during development, but might be good to play with for different results.
--- gradient - values greater than 0 will add a gradient loss calculation. default is 0
--- sobel - values greater than 0 will add a sobel filter loss calculation, useful for more edge definition. default is 0
--- l1 -values greater than 0 will add L1 criterion loss calculation (sum of per-pixel loss)
--- global-lr - Learning rate for training. default is 0.01
--- gamma - Learning rate multiplier when loss stops decreasing. default is 0.997
--- mutation-scale - add parameter mutation during training for some added randomness. default is 0
++ -- gradient - values greater than 0 will add a gradient loss calculation. default is 0
++ -- sobel - values greater than 0 will add a sobel filter loss calculation, useful for more edge definition. default is 0
++ -- l1 -values greater than 0 will add L1 criterion loss calculation (sum of per-pixel loss)
++ -- global-lr - Learning rate for training. default is 0.01
++ -- gamma - Learning rate multiplier when loss stops decreasing. default is 0.997
++ -- mutation-scale - add parameter mutation during training for some added randomness. default is 0
+
+## Installation and Setup
+Make sure to Python 3 and PIP are installed before attempting.
+1. Open a terminal/command prompt and clone this repo:
+~~~
+cd path-to-folder
+git clone https://github.com/pixlpa/gabor-imfit.git
+cd gabor-imfit
+~~~
+2. (Recommended) Create a python virtual environment with venv:
+    % python -m venv venv
+    % venv/Scripts/activate
+3. Install dependencies:
+    % pip install torch torchvision numpy tqdm
+4. Create `source-images, source-weights, and results` folders in the gabor-imfit/ directory.
+5. Place images and weights in these folders, respectively. Image names should follow "img0001.png" format, and weight images should follow "img0001-wt.png" file name convention, especially for 'folder' and 'video' modes.
+6. You should now be ready to run the `training.py` script. You can test by running the following command:
+    % python training.py source-images/img0001.png --weight source-weights/img001-wt.png --output-dir results/test/ --size 256
+7. If all was successful, it should run the training loop and store a preview image and weights txt file in the results/test/ folder. 
