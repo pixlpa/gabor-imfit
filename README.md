@@ -78,3 +78,4 @@ cd gabor-imfit
 6. You should now be ready to run the `training.py` script. You can test by running the following command:
     % python training.py source-images/img0001.png --weight source-weights/img001-wt.png --output-dir results/test/ --size 256
 7. If all was successful, it should run the training loop and store a preview image and weights txt file in the results/test/ folder. 
+8. If you set up a virtual environment, you can run `venv/Scripts/activate` whenever starting a new session
