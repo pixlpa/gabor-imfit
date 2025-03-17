@@ -14,22 +14,22 @@ GABOR_MIN ={
     'u': 0,
     'v': 0,
     'theta': 0,
-    'rel_sigma': 0.05,
+    'rel_sigma': 0.01,
     'rel_freq': -0.25,
-    'gamma': 0.03,
-    'psi': -3,
-    'amplitude': 0.00
+    'gamma': 0.01,
+    'psi': -1,
+    'amplitude': 0.001
 }
 
 GABOR_MAX ={
     'u': 1,
     'v': 1,
     'theta': 2,
-    'rel_sigma': 0.7,
+    'rel_sigma': 0.4,
     'rel_freq': 0.5,
-    'gamma': 0.15,
-    'psi': 3,
-    'amplitude': 0.2
+    'gamma': 0.4,
+    'psi': 1,
+    'amplitude': 0.3
 }
 
 #the Model definition
@@ -103,10 +103,10 @@ class GaborLayer(nn.Module):
             self.u.clamp_(-1, 1)
             self.v.clamp_(-1, 1)
             self.theta.clamp_(-2, 2)
-            self.rel_sigma.clamp_(1e-4,5)
+            self.rel_sigma.clamp_(1e-3,1)
             self.rel_freq.clamp_(-5,5)
             self.psi.clamp_(-1, 1)
-            self.gamma.clamp_(1e-4,1.5)
+            self.gamma.clamp_(1e-4,1)
             self.amplitude.clamp_(0,1)
 
 # The ImageFitter class manages the work of training the model

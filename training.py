@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import os
 import re
+import copy
 from tqdm import tqdm
 from torchvision.transforms.functional import gaussian_blur
 from imfit import GaborLayer,ImageFitter
@@ -146,6 +147,26 @@ def process_video(args,device):
                 previous = process_image(filename,None,args,device,previous)
             count=count+1
 
+def process_vm(args,device):
+    fpath = args.image
+    outdir = args.output_dir
+    folderlist = os.listdir(fpath)
+    for folder in folderlist:
+        fullpath = os.path.join(fpath,folder)
+        if os.path.exists(os.path.join(fullpath,'images')):
+            print(f"Training video: {folder}")
+            fullpath = os.path.join(fpath,folder)
+            print(f"Full path: {fullpath}")
+            fname = os.path.split(folder)[1]
+            vargs = copy.copy(args)
+            vargs.image = os.path.join(fullpath,'images')
+            vargs.weight = os.path.join(fullpath,'weights')
+            vargs.output_dir = os.path.join(args.output_dir,fname)
+            print(f"Output Directory:{vargs.output_dir}")
+            os.makedirs(vargs.output_dir, exist_ok=True)
+            vargs.mode = 'video'
+            process_video(vargs,device)
+
 def main():
     """Run Gabor image fitting on an input image."""
     # Parse command line arguments
@@ -195,6 +216,8 @@ def main():
         process_folder(args, device)
     elif args.mode == 'video':
         process_video(args, device)
+    elif args.mode == 'vm':
+        process_vm(args,device)
     else:
         process_image(args.image,args.weight,args,device,None)
 
