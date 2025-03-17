@@ -79,3 +79,32 @@ cd gabor-imfit
     % python training.py source-images/img0001.png --weight source-weights/img001-wt.png --output-dir results/test/ --size 256
 7. If all was successful, it should run the training loop and store a preview image and weights txt file in the results/test/ folder. 
 8. If you set up a virtual environment, you can run `venv/Scripts/activate` whenever starting a new session
+
+##Examples
+~~~
+% python3 training.py images/img001.png --weight weights/img001-wt.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
+~~~
+In image mode, you can train a single image
+
+~~~
+% python3 training.py images/img001.png --weight weights/img001-wt.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
+~~~
+In image mode, you can train a single image
+
+~~~
+% python3 training.py images/ --weight weights/ --iterations 500 --rescales 3 --output-dir results/ --size 512 --num-gabors 256 --mode folder
+~~~
+This will run a higher quality training with more iterations, more rescale cycles, and higher training resolution. This will run much more slowly for each image but will provide greater accuracy.
+
+~~~
+% python3 training.py D1/images/ --weight D1/weights/ --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode video
+~~~
+In video mode, you can train a folder of images in a sequence, where each frame is initialized from the results of the previous frame. Every 10 frames there is a "keyframe" that is not initialized and begins the training process fresh. This is done to reduce flicker from having each frame be completely unique 
+
+~~~
+% python3 training.py D1/ --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode vm
+~~~
+In 'vm' mode, you can train a folder full of video folders, each of which must have an "images" and a "weights" folder inside the directory. This mode allows for training a whole series of video image sequences in bulk rather than running individual sessions.
+
+
+
