@@ -113,7 +113,7 @@ class GaborLayer(nn.Module):
 class ImageFitter:
     def __init__(self, image_path, weight_path=None, num_gabors=256, target_size=None, 
                  device='cuda', init=None,
-                 global_lr=0.03, local_lr=0.01, init_size=128, mutation_strength=0.01, gamma = 0.85,
+                 global_lr=0.03, debug=None, mutation_strength=0.01, gamma = 0.85,
                  sobel = 0., gradient = 0., l1 = 0.):  # Add learning rate parameters
         #load the image
         image = Image.open(image_path).convert('RGB')
@@ -145,6 +145,7 @@ class ImageFitter:
         self.gradient = gradient
         self.l1 = l1
         self.device = device
+        self.debug = debug
 
         #convert image to tensor and send to CUDA
         self.target = transform(image).to(device)
@@ -278,7 +279,6 @@ class ImageFitter:
         if init:
             # self.load_model(init)
             self.load_weights(init)
-            print("Initialized parameters from", init)
 
     def init_optimizer(self,global_lr):
         # Initialize optimizers with provided learning rates
@@ -526,13 +526,17 @@ class ImageFitter:
         h, w = self.og_target.shape[-2:]
         h1 = h
         w1 = w
+        imgsize = 512
+        if self.debug:
+            imgsize = self.debug
         # rescale output size to 512 base
+        # rescale to "debug size"
         if h > w:
-            h1 = 512
-            w1 = int(512 * (w / h))
+            h1 = imgsize
+            w1 = int(imgsize * (w / h))
         else:
-            w1 = 512
-            h1 = int(512 * (h/w))
+            w1 = imgsize
+            h1 = int(imgsize * (h/w))
 
         with torch.no_grad():
             y, x = torch.meshgrid(torch.linspace(-1, 1, h1), torch.linspace(-1, 1, w1),indexing='ij')
