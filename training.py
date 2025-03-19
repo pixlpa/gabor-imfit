@@ -35,6 +35,7 @@ def process_image(image_name,weight_path,args,device,previous=None):
         device, 
         init,
         global_lr=args.global_lr,
+        debug = args.debug,
         mutation_strength=args.mutation_strength,
         gamma = args.gamma,
         sobel = args.sobel,
@@ -42,7 +43,7 @@ def process_image(image_name,weight_path,args,device,previous=None):
         l1 = args.l1
     )
     #save initial image
-    if init:
+    if init and args.debug:
         fitter.save_image(os.path.join(args.output_dir, f"initial_{image_name}.png"))
 
     # Training loop
@@ -68,11 +69,6 @@ def process_image(image_name,weight_path,args,device,previous=None):
                     temp = fitter.scheduler.get_last_lr()[0]
                     pbar.set_postfix(loss=f"{loss:.6f}", lr=f"{temp:.6f}")
                     pbar.update(5)
-                # if i % 50 == 0 or i == args.iterations - 1:
-                        #fitter.save_image(os.path.join(args.output_dir, f'result_{progress:04d}.png'))            
-                        #progress+=1  
-    #  for b in range(20):
-    #     fitter.single_optimize(np.random.randint(0, args.num_gabors-1),args.single_iterations)
     fitter.resize_target(args.size)
     for param_group in fitter.optimizer.param_groups:
         param_group['lr'] = args.global_lr
@@ -86,16 +82,14 @@ def process_image(image_name,weight_path,args,device,previous=None):
                 temp = fitter.scheduler.get_last_lr()[0]
                 pbar.set_postfix(loss=f"{loss:.6f}", lr=f"{temp:.6f}")
                 pbar.update(5)
-           # if i % 50 == 0 or i == args.iterations - 1:
-            #        fitter.save_image(os.path.join(args.output_dir, f'result_{progress:04d}.png'))            
-             #       progress+=1
     
     # Save final result
     if args.output_dir:
-        if args.mode == 'image':
-            fitter.save_final(os.path.join(args.output_dir, f"{short_name}.png"))
-        else:
-            fitter.save_final(os.path.join(args.output_dir, image_name))
+        if args.debug:
+            if args.mode == 'image':
+                fitter.save_final(os.path.join(args.output_dir, f"{short_name}.png"))
+            else:
+                fitter.save_final(os.path.join(args.output_dir, image_name))
         fitter.save_weights(os.path.join(args.output_dir, f"{short_name}.txt"))
         print(f"Saved {image_name} result with loss: {fitter.best_loss:.6f}")
         return os.path.join(args.output_dir,f"{short_name}.txt")
@@ -114,7 +108,6 @@ def process_folder(args,device):
     filelist = sorted_by_nums(os.listdir(args.image))
     for filename in filelist:
         if filename.endswith((".png", ".jpg", ".jpeg")):  # Check file extension
-            print(f"Processing file:{filename}")
             im_name = os.path.splitext(filename)[0]
             if args.weight:
                 weight_name = f"{im_name}-wt.png"
@@ -132,7 +125,6 @@ def process_video(args,device):
     previous = None
     for filename in filelist:
         if filename.endswith((".png", ".jpg", ".jpeg")):  # Check file extension
-            print(f"Processing file:{filename}")
             im_name = os.path.splitext(filename)[0]
             if args.weight:
                 weight_name = f"{im_name}-wt.png"
@@ -202,7 +194,8 @@ def main():
                        help='Mutation strength')
     parser.add_argument('--gamma', type=float, default=0.997,
                        help='learning rate gamma')
-    parser.add_argument('--mode', type=str, default='image')
+    parser.add_argument('--mode', type=str, default='image'),
+    parser.add_argument('--debug',type=int, default= None, help="Size of debug images")
     args = parser.parse_args()
 
     # Create output directory if it doesn't exist
