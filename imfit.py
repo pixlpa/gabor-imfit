@@ -331,12 +331,13 @@ class ImageFitter:
             wtu = ((u * 0.5 + 0.5) * weights.size()[0]).clamp_(0,weights.size(0)-1).to(int)
             wtv = ((v * 0.5 + 0.5) * weights.size()[1]).clamp_(0,weights.size(1)-1).to(int)
             zero_mask = (weights[wtu, wtv] <= 0.000)
+
             if zero_mask.any():
                 # Generate random indices for reinitialization
                 num_to_reinitialize = zero_mask.to(torch.int32).sum().item()
                 new_indices = torch.randn(num_to_reinitialize).normal_(-1,1), torch.randn(num_to_reinitialize).normal_(-1,1).to(self.device)
                 # Update u and v with new random values where the mask is True
-                u[zero_mask] = new_indices[0].to(self.device)
+                u[zero_mask]] = new_indices[0].to(self.device)
                 v[zero_mask] = new_indices[1].to(self.device)
                 self.model.u = u.to(self.device)
                 self.model.v = v.to(self.device)
@@ -530,7 +531,7 @@ class ImageFitter:
         loss.backward()
         self.optimizer.step()
         self.scheduler.step(loss)
-        if iteration < (max_iterations/8):
+        if iteration < 10:
             self.pos_check(self.weights)
         
         # Store best result if save_best is active (currently only during last phase)
