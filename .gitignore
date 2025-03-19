@@ -1,7 +1,10 @@
 .DS_Store
 .venv
+venv
 __pycache__
 results
 source-images
 source-weights
 videos
+D1
+D2
