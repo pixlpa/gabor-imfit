@@ -328,8 +328,8 @@ class ImageFitter:
         with torch.no_grad():
             u = self.model.u
             v = self.model.v
-            wtu = ((u * 0.5 + 0.5) * weights.size()[0]).to(int)
-            wtv = ((v * 0.5 + 0.5) * weights.size()[1]).to(int)
+            wtu = ((u * 0.5 + 0.5) * weights.size()[0]).clamp_(0,weights.size(0)-1).to(int)
+            wtv = ((v * 0.5 + 0.5) * weights.size()[1]).clamp_(0,weights.size(1)-1).to(int)
             zero_mask = (weights[wtu, wtv] <= 0.000)
             if zero_mask.any():
                 # Generate random indices for reinitialization
