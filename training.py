@@ -110,7 +110,7 @@ def process_folder(args,device):
         if filename.endswith((".png", ".jpg", ".jpeg")):  # Check file extension
             im_name = os.path.splitext(filename)[0]
             if args.weight:
-                weight_name = f"{im_name}-wt.png"
+                weight_name = f"{im_name}.png"
                 weight_path = os.path.join(args.weight,weight_name)
                 if os.path.exists(weight_path):
                     process_image(filename,weight_path,args,device,args.init)
@@ -122,14 +122,15 @@ def process_folder(args,device):
 def process_video(args,device):
     filelist = sorted_by_nums(os.listdir(args.image))
     count = 0
+    kframes = args.keyframes
     previous = None
     for filename in filelist:
         if filename.endswith((".png", ".jpg", ".jpeg")):  # Check file extension
             im_name = os.path.splitext(filename)[0]
             if args.weight:
-                weight_name = f"{im_name}-wt.png"
+                weight_name = f"{im_name}.png"
                 weight_path = os.path.join(args.weight,weight_name)
-                if count%10 == 0:
+                if count%kframes == 0:
                     previous = None
                 if os.path.exists(weight_path):
                     previous = process_image(filename,weight_path,args,device,previous)
@@ -196,6 +197,7 @@ def main():
                        help='learning rate gamma')
     parser.add_argument('--mode', type=str, default='image'),
     parser.add_argument('--debug',type=int, default= None, help="Size of debug images")
+    parser.add_argument('--keyframes', type=int, default=100, help="Keyframe every N frames")
     args = parser.parse_args()
 
     # Create output directory if it doesn't exist

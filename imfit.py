@@ -337,7 +337,7 @@ class ImageFitter:
                 num_to_reinitialize = zero_mask.to(torch.int32).sum().item()
                 new_indices = torch.randn(num_to_reinitialize).normal_(-1,1), torch.randn(num_to_reinitialize).normal_(-1,1).to(self.device)
                 # Update u and v with new random values where the mask is True
-                u[zero_mask]] = new_indices[0].to(self.device)
+                u[zero_mask] = new_indices[0].to(self.device)
                 v[zero_mask] = new_indices[1].to(self.device)
                 self.model.u = u.to(self.device)
                 self.model.v = v.to(self.device)

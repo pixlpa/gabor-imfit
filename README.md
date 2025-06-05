@@ -82,12 +82,12 @@ cd gabor-imfit
 
 ##Examples
 ~~~
-% python3 training.py images/img001.png --weight weights/img001-wt.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
+% python3 training.py images/img001.png --weight weights/img001.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
 ~~~
 In image mode, you can train a single image
 
 ~~~
-% python3 training.py images/img001.png --weight weights/img001-wt.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
+% python3 training.py images/img001.png --weight weights/img001.png --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode image
 ~~~
 In image mode, you can train a single image
 
@@ -99,7 +99,7 @@ This will run a higher quality training with more iterations, more rescale cycle
 ~~~
 % python3 training.py D1/images/ --weight D1/weights/ --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode video
 ~~~
-In video mode, you can train a folder of images in a sequence, where each frame is initialized from the results of the previous frame. Every 10 frames there is a "keyframe" that is not initialized and begins the training process fresh. This is done to reduce flicker from having each frame be completely unique 
+In video mode, you can train a folder of images in a sequence, where each frame is initialized from the results of the previous frame. Every 100 frames there is a "keyframe" that is not initialized and begins the training process fresh. This is done to reduce flicker and tween issues from having each frame be completely unique. You can set the interval of fresh keyframes with the --keyframes argument. 
 
 ~~~
 % python3 training.py D1/ --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode vm
