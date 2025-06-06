@@ -106,5 +106,7 @@ In video mode, you can train a folder of images in a sequence, where each frame 
 ~~~
 In 'vm' mode, you can train a folder full of video folders, each of which must have an "images" and a "weights" folder inside the directory. This mode allows for training a whole series of video image sequences in bulk rather than running individual sessions.
 
-
+% python3 training.py D1.mp4 --weight D1-Z.mp4 --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode vx --start 100 --end 300 --keyframes 100
+~~~
+In 'vx' mode, you can input movie clips directly and it will automatically export frame sequences with a proper folder structure, and begin training. This example also uses start and end frame numbers to define a limited range of training. It also sets the keyframe interval - tradeoff between less "glitches" with longer keyframe intervals and more accuracy with shorter intervals.
 

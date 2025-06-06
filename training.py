@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 from PIL import Image
+import ffmpeg
 import numpy as np
 import argparse
 import os
@@ -104,6 +105,15 @@ def by_nums(filename):
 def sorted_by_nums(filenames):
     return sorted(filenames, key=by_nums)
 
+def limit_by_nums(filenames,start,end):
+    newlist = []
+    for file in filenames:
+        numstring = re.findall(r'\d+', file)
+        numval = int(numstring[0])
+        if numval >= start and numval <= end:
+            newlist.append(file)
+    return newlist
+
 def process_folder(args,device):
     filelist = sorted_by_nums(os.listdir(args.image))
     for filename in filelist:
@@ -121,6 +131,8 @@ def process_folder(args,device):
 
 def process_video(args,device):
     filelist = sorted_by_nums(os.listdir(args.image))
+    if args.end:
+        filelist = limit_by_nums(filelist,args.start,args.end)
     count = 0
     kframes = args.keyframes
     previous = None
@@ -139,6 +151,30 @@ def process_video(args,device):
             else:
                 previous = process_image(filename,None,args,device,previous)
             count=count+1
+def process_vx(args,device):
+    vargs = copy.copy(args)
+    vargs.mode = 'video'
+    if args.export:
+        os.makedirs(args.export, exist_ok=True)
+        im_path = os.path.join(args.export,'images')
+        os.makedirs(im_path, exist_ok=True)
+        (
+            ffmpeg.input(args.image)
+            .output(os.path.join(im_path,'img%04d.png'))
+            .run()
+        )
+        vargs.image = im_path
+        if args.weight:
+            wt_path = os.path.join(args.export,'weights')
+            os.makedirs(wt_path, exist_ok=True)
+            (
+                ffmpeg.input(args.weight)
+                .output(os.path.join(wt_path,'img%04d.png'))
+                .run()
+            )
+            vargs.weight = wt_path
+        process_video(vargs,device)
+
 
 def process_vm(args,device):
     fpath = args.image
@@ -195,9 +231,12 @@ def main():
                        help='Mutation strength')
     parser.add_argument('--gamma', type=float, default=0.997,
                        help='learning rate gamma')
-    parser.add_argument('--mode', type=str, default='image'),
+    parser.add_argument('--mode', type=str, default='image')
     parser.add_argument('--debug',type=int, default= None, help="Size of debug images")
     parser.add_argument('--keyframes', type=int, default=100, help="Keyframe every N frames")
+    parser.add_argument('--start', type=int, default=0, help="Start frame")
+    parser.add_argument('--end', type=int, default=None, help="Optional end frame")
+    parser.add_argument('--export', type=str, default=None, help="Export path")
     args = parser.parse_args()
 
     # Create output directory if it doesn't exist
@@ -213,6 +252,8 @@ def main():
         process_video(args, device)
     elif args.mode == 'vm':
         process_vm(args,device)
+    elif args.mode == 'vx':
+        process_vx(args,device)
     else:
         process_image(args.image,args.weight,args,device,None)
 
