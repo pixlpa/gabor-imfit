@@ -106,7 +106,105 @@ In video mode, you can train a folder of images in a sequence, where each frame 
 ~~~
 In 'vm' mode, you can train a folder full of video folders, each of which must have an "images" and a "weights" folder inside the directory. This mode allows for training a whole series of video image sequences in bulk rather than running individual sessions.
 
-% python3 training.py D1.mp4 --weight D1-Z.mp4 --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode vx --start 100 --end 300 --keyframes 100
+% python3 training.py D1.mp4 --weight D1-Z.mp4 --iterations 200 --rescales 2 --output-dir results/ --size 256 --num-gabors 256 --mode vx --start 100 --end 300 --keyframes 100 --export-size 256
 ~~~
 In 'vx' mode, you can input movie clips directly and it will automatically export frame sequences with a proper folder structure, and begin training. This example also uses start and end frame numbers to define a limited range of training. It also sets the keyframe interval - tradeoff between less "glitches" with longer keyframe intervals and more accuracy with shorter intervals.
 
+Frames land in `--export` (default `<output-dir>/frames`) and are reused on a
+re-run, so a second pass with the same settings skips extraction. Changing
+`--export-size` against an existing export is refused rather than silently
+mixing resolutions — delete the directory to re-export.
+
+**Set `--export-size`.** Extraction writes one PNG per frame at the source
+resolution by default, and frames are downscaled to `--size` before fitting
+anyway, so anything larger is wasted disk: a 6873-frame 720p clip is **6.8 GB
+at full resolution and 0.5 GB at `--export-size 256`**. Setting it to `--size`
+is almost always right. (The scaler uses lanczos to match the fitter's own PIL
+resize; the two routes still differ by ~41 dB PSNR, far below the fit's own
+error, but don't mix exports at different sizes within one sequence.)
+
+Note that `--start` / `--end` filter the extracted frames, they do not limit
+extraction — the whole clip is still written out first. To work on a short
+stretch, cut the source with ffmpeg instead.
+
+
+## Fast engine (`--engine fast`)
+
+`imfit_fast.py` is an alternate fitting engine that swaps the dense Gabor
+broadcast for a fused Metal kernel (`gabor_metal/`, vendored from
+jitter-vision). It plugs into `training.py` through the same interface and
+writes the same `.txt` weight format, so it is interchangeable with the default
+engine mid-pipeline, including the video `--init` warm-start chain.
+
+The classic `GaborLayer.forward` builds `amplitude * gaussian * sinusoid` at
+`[N, 3, H, W]` before summing over N. At `--num-gabors 256 --size 512` that is
+805 MB for one intermediate, ~2 GB per forward with the others, and again for
+the backward. The fast engine computes the same sum with O(1) intermediate
+memory, so it raises the resolution and atom-count ceiling as well as the speed.
+
+~~~
+% python3 training.py image.png --engine fast --num-gabors 256 --size 512 --iterations 1000
+~~~
+
+Measured at `--num-gabors 256 --size 512 --iterations 200 --rescales 0`:
+
+| | classic | fast |
+|---|---|---|
+| wall clock | 68.4 s | **2.97 s** |
+| final loss | 0.024570 | **0.023630** |
+| forward render alone | 114 ms | **1.20 ms** |
+| backward render alone | — | **4.84 ms** |
+
+The fast engine also lands slightly *better*, not just sooner — the tighter
+gamma floor keeps atoms out of the kernel's frozen-gradient band (see below).
+
+That is 23x. The first version of this engine only reached 5.3x, because
+swapping the forward exposed the backward: `gabor_metal` dispatched one *thread*
+per (batch, gabor), so at B=1, N=256 just 256 threads each swept all 262144
+pixels and the step was 44.5 ms of backward against 1.3 ms of forward. The
+kernel now dispatches one *threadgroup* per gabor with a simd_sum reduction
+(ported from `jit.gaborfit`), taking the backward to 4.84 ms.
+
+That kernel picks its dispatch by `B*N`: the parallel path wins by up to 16x
+while `B*N` alone underfills the GPU and loses above `B*N ~= 2800`, where the
+reduction becomes pure overhead. Single-image fitting like this one is the best
+case for it.
+
+Requires Apple Silicon (MPS). On any other device it falls back to an
+equivalent dense render with no speedup, so the flag is always safe to pass.
+
+### Guards
+
+Optional fit guardrails, ported from jitter-vision `tools/data/fit_guards.py`.
+All default to off, so `--engine fast` on its own changes speed and nothing
+else. They apply to the fast engine only.
+
+| flag | effect |
+|---|---|
+| `--band-dilate-px` | Mip band-limit, `sigma_eff = sqrt(sigma² + d²)`; suppresses sub-pixel needle atoms |
+| `--freq-floor-px` | minimum carrier period in pixels |
+| `--amp-penalty` | penalty on amplitude carried by sub-pixel-thin atoms |
+| `--group-lr` | per-parameter-group learning rates (position > geometry > frequency) |
+| `--relocate-every` | every N steps, move negligible atoms to high-residual locations and reset their Adam moments |
+| `--relocate-until` | stop relocating after this fraction of each phase (default 0.75) |
+
+`--relocate-until` exists because relocation that runs to the last step leaves a
+cohort that never converges: in the jitter-vision cache fits, dead atoms went
+from 3.1% at 200 steps to 11.2% at 1600 with no cutoff.
+
+A `--seed` argument was added at the same time; without it neither engine is
+reproducible, which makes A/B comparison impossible.
+
+### Difference from the default engine
+
+One intentional behavioural difference: the fast engine clamps `gamma` to
+`[1e-3, 1]` where the classic engine uses `[1e-4, 1]`. The Metal kernel floors
+the gamma denominator at `1e-3` and zeroes its gradient below, so atoms in
+`[1e-4, 1e-3)` would be permanently frozen as degenerate needles. With the floor
+matched, the two renders agree to float round-off (max 1e-5 on a [-1,1] image).
+
+Note that this affects more atoms than it sounds like. `GaborLayer.__init__`
+calls `Tensor.normal_(GABOR_MIN[k], GABOR_MAX[k])`, and `normal_` takes
+*(mean, std)* rather than a range — so `gamma` is drawn from `N(0.01, 0.4)` and
+roughly half of every initial population lands on its clamp. On a 48-atom test,
+28 atoms started below `1e-3`.

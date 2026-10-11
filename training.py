@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 from PIL import Image
-import ffmpeg
 import numpy as np
 import argparse
 import os
@@ -12,6 +11,11 @@ import copy
 from tqdm import tqdm
 from torchvision.transforms.functional import gaussian_blur
 from imfit import GaborLayer,ImageFitter
+
+try:
+    import ffmpeg          # only needed by --mode vx
+except ImportError:
+    ffmpeg = None
 
 def process_image(image_name,weight_path,args,device,previous=None):
     im_name = os.path.basename(image_name)
@@ -28,13 +32,7 @@ def process_image(image_name,weight_path,args,device,previous=None):
         init = previous
 
     # Initialize fitter with target size and learning rates
-    fitter = ImageFitter(
-        image_path, 
-        weight_path, 
-        init_gabors, 
-        target_size, 
-        device, 
-        init,
+    kwargs = dict(
         global_lr=args.global_lr,
         debug = args.debug,
         mutation_strength=args.mutation_strength,
@@ -42,6 +40,17 @@ def process_image(image_name,weight_path,args,device,previous=None):
         sobel = args.sobel,
         gradient = args.gradient,
         l1 = args.l1
+    )
+    if getattr(args, 'guards', None) is not None:
+        kwargs['guards'] = args.guards
+    fitter = getattr(args, 'fitter_cls', ImageFitter)(
+        image_path,
+        weight_path,
+        init_gabors,
+        target_size,
+        device,
+        init,
+        **kwargs
     )
     #save initial image
     if init and args.debug:
@@ -151,29 +160,73 @@ def process_video(args,device):
             else:
                 previous = process_image(filename,None,args,device,previous)
             count=count+1
+def extract_frames(src, dest, size=None):
+    """Extract src to dest/img%04d.png, skipping if frames are already there.
+
+    size caps the longest edge (aspect preserved). Frames only ever get resized
+    down to --size before fitting, so exporting larger than that is wasted disk:
+    a 6800-frame 720p clip is ~10 GB at full resolution and ~250 MB at 256.
+    """
+    os.makedirs(dest, exist_ok=True)
+    stamp = os.path.join(dest, '.export_size')
+    existing = [f for f in os.listdir(dest) if f.endswith('.png')]
+    if existing:
+        prev = None
+        if os.path.exists(stamp):
+            prev = open(stamp).read().strip() or None
+        want = str(size) if size else None
+        if prev != want:
+            raise SystemExit(
+                f"{dest} already holds {len(existing)} frames exported at "
+                f"{prev or 'full size'}, but --export-size is now "
+                f"{want or 'unset (full size)'}.\n"
+                f"Delete that directory to re-export, or match the previous value.")
+        print(f"Reusing {len(existing)} already-extracted frames in {dest}")
+        return dest
+
+    print(f"Extracting {src} -> {dest}" + (f" (longest edge {size})" if size else ""))
+    stream = ffmpeg.input(src)
+    if size:
+        # longest edge -> size, other edge auto; -2 keeps it even.
+        # lanczos to match ImageFitter's own PIL resize, so a frame exported at
+        # --size gives the same target as one exported full-size and downscaled.
+        stream = stream.filter('scale',
+                               f'if(gt(iw,ih),{size},-2)',
+                               f'if(gt(iw,ih),-2,{size})',
+                               flags='lanczos')
+    stream.output(os.path.join(dest, 'img%04d.png')).run()
+    n = len([f for f in os.listdir(dest) if f.endswith('.png')])
+    if n == 0:
+        raise SystemExit(f"ffmpeg extracted no frames from {src}")
+    with open(stamp, 'w') as f:
+        f.write(str(size) if size else '')
+    print(f"Extracted {n} frames")
+    return dest
+
 def process_vx(args,device):
+    if ffmpeg is None:
+        raise SystemExit("--mode vx needs ffmpeg-python: pip install ffmpeg-python")
+    if not os.path.exists(args.image):
+        raise SystemExit(f"no such video: {args.image}")
     vargs = copy.copy(args)
     vargs.mode = 'video'
-    if args.export:
-        os.makedirs(args.export, exist_ok=True)
-        im_path = os.path.join(args.export,'images')
-        os.makedirs(im_path, exist_ok=True)
-        (
-            ffmpeg.input(args.image)
-            .output(os.path.join(im_path,'img%04d.png'))
-            .run()
-        )
-        vargs.image = im_path
-        if args.weight:
-            wt_path = os.path.join(args.export,'weights')
-            os.makedirs(wt_path, exist_ok=True)
-            (
-                ffmpeg.input(args.weight)
-                .output(os.path.join(wt_path,'img%04d.png'))
-                .run()
-            )
-            vargs.weight = wt_path
-        process_video(vargs,device)
+    # --export used to be required, and training was skipped without it with no
+    # message at all. Default it next to the output so the documented
+    # invocation works.
+    export = args.export or os.path.join(args.output_dir, 'frames')
+    os.makedirs(export, exist_ok=True)
+    esize = args.export_size
+    if esize is None and args.size:
+        print(f"note: exporting at full resolution. Frames are downscaled to "
+              f"--size {args.size} before fitting anyway, so --export-size "
+              f"{args.size} would save a lot of disk.")
+    elif esize and args.size and esize < args.size:
+        print(f"warning: --export-size {esize} is below --size {args.size}; "
+              f"frames will be upscaled back up before fitting.")
+    vargs.image = extract_frames(args.image, os.path.join(export, 'images'), esize)
+    if args.weight:
+        vargs.weight = extract_frames(args.weight, os.path.join(export, 'weights'), esize)
+    process_video(vargs,device)
 
 
 def process_vm(args,device):
@@ -236,8 +289,51 @@ def main():
     parser.add_argument('--keyframes', type=int, default=100, help="Keyframe every N frames")
     parser.add_argument('--start', type=int, default=0, help="Start frame")
     parser.add_argument('--end', type=int, default=None, help="Optional end frame")
-    parser.add_argument('--export', type=str, default=None, help="Export path")
+    parser.add_argument('--export', type=str, default=None,
+                       help="Where --mode vx writes extracted frames "
+                            "(default: <output-dir>/frames)")
+    parser.add_argument('--export-size', type=int, default=None,
+                       help="Longest edge for frames extracted by --mode vx "
+                            "(aspect preserved). Default: source resolution. "
+                            "Frames are downscaled to --size before fitting, so "
+                            "setting this to --size avoids writing huge PNGs.")
+    parser.add_argument('--seed', type=int, default=None,
+                       help="Seed the RNG so runs are reproducible (needed to A/B engines)")
+
+    # ── engine selection ──────────────────────────────────────────────────
+    parser.add_argument('--engine', choices=['classic', 'fast'], default='classic',
+                       help="'classic' = imfit.py dense render; "
+                            "'fast' = imfit_fast.py fused Metal kernel (MPS)")
+    # Guards below apply to --engine fast only; all default to off.
+    parser.add_argument('--band-dilate-px', type=float, default=0.0,
+                       help="[fast] Mip band-limit in pixels; suppresses sub-pixel needles")
+    parser.add_argument('--freq-floor-px', type=float, default=0.0,
+                       help="[fast] Minimum carrier period in pixels")
+    parser.add_argument('--amp-penalty', type=float, default=0.0,
+                       help="[fast] Penalty weight on amplitude in sub-pixel-thin atoms")
+    parser.add_argument('--group-lr', action='store_true',
+                       help="[fast] Per-parameter-group learning rates")
+    parser.add_argument('--relocate-every', type=int, default=0,
+                       help="[fast] Relocate negligible atoms every N steps (0=off)")
+    parser.add_argument('--relocate-thresh', type=float, default=1e-3,
+                       help="[fast] Contribution proxy below which an atom is parked")
+    parser.add_argument('--relocate-until', type=float, default=0.75,
+                       help="[fast] Stop relocating after this fraction of each phase")
     args = parser.parse_args()
+
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+
+    # Resolve the engine. I/O is identical either way; `fast` only adds the
+    # `guards` kwarg, which process_image passes through when present.
+    args.guards = None
+    if args.engine == 'fast':
+        from imfit_fast import Guards, ImageFitter as FastImageFitter
+        args.fitter_cls = FastImageFitter
+        args.guards = Guards.from_args(args)
+    else:
+        args.fitter_cls = ImageFitter
 
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
